@@ -134,6 +134,12 @@ export class MeshServer {
     );
     this.protocolHandler.setMessageRouter(this.messageRouter);
 
+    // Wire: relay presence events (USER_ADVERTISE/USER_REMOVE) to all
+    // locally connected Socket.io clients for real-time user list updates
+    this.presenceManager.onPresenceChange = (envelope) => {
+      this.localUserManager.broadcastToLocalClients(envelope);
+    };
+
     // Wire: plug userLocations snapshot into MeshManager so SERVER_WELCOME
     // includes current online users when a new server joins
     this.meshManager.getUserLocationsSnapshot = () =>

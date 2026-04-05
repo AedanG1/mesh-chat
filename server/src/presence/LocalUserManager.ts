@@ -161,6 +161,21 @@ export class LocalUserManager {
     });
   }
 
+  // ── Relay presence to clients ──────────────────────────────────────────────
+
+  /**
+   * Forward a USER_ADVERTISE or USER_REMOVE envelope to all locally
+   * connected clients so their user lists update in real time.
+   *
+   * Called by MeshServer wiring whenever PresenceManager processes an
+   * inbound presence event (both local and from peer servers).
+   */
+  broadcastToLocalClients(envelope: Envelope): void {
+    for (const link of this.localUsers.values()) {
+      link.send(envelope);
+    }
+  }
+
   // ── Accessors ─────────────────────────────────────────────────────────────
 
   /** Check if a user is connected locally. */

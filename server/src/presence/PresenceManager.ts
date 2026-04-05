@@ -53,6 +53,13 @@ export class PresenceManager {
   private meshManager: MeshManager;
   private seenCache: SeenCache;
 
+  /**
+   * Optional callback fired whenever a presence event (advertise/remove)
+   * is processed. MeshServer wires this to LocalUserManager.broadcastToLocalClients
+   * so connected clients get real-time user list updates.
+   */
+  onPresenceChange?: (envelope: Envelope) => void;
+
   constructor(
     serverId: string,
     crypto: ServerCrypto,
@@ -111,6 +118,7 @@ export class PresenceManager {
     // Mark as seen before broadcasting so we don't re-process our own gossip
     await this.seenCache.markSeen(envelope);
     this.meshManager.broadcast(envelope);
+    this.onPresenceChange?.(envelope);
   }
 
   /**
@@ -143,6 +151,7 @@ export class PresenceManager {
 
     await this.seenCache.markSeen(envelope);
     this.meshManager.broadcast(envelope);
+    this.onPresenceChange?.(envelope);
   }
 
   // ── Inbound ───────────────────────────────────────────────────────────────
@@ -187,6 +196,7 @@ export class PresenceManager {
 
     // Forward to all other servers (gossip propagation)
     this.meshManager.broadcast(envelope, fromLink.remoteId);
+    this.onPresenceChange?.(envelope);
   }
 
   /**
@@ -221,6 +231,7 @@ export class PresenceManager {
     }
 
     this.meshManager.broadcast(envelope, fromLink.remoteId);
+    this.onPresenceChange?.(envelope);
   }
 
   // ── Accessors ─────────────────────────────────────────────────────────────
