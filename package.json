@@ -1,0 +1,27 @@
+{
+  "name": "mesh-chat",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "common",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.5.2",
+    "@types/supertest": "^7.2.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "supertest": "^7.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.0",
+    "vitest": "^3.1.0"
+  }
+}

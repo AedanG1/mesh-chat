@@ -1,0 +1,21 @@
+{
+  "name": "@mesh-chat/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@mesh-chat/common": "*",
+    "argon2": "^0.44.0",
+    "better-sqlite3": "^12.8.0",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "uuid": "^13.0.0",
+    "ws": "^8.20.0"
+  }
+}
