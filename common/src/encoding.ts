@@ -31,6 +31,6 @@ export function toBase64Url(bytes: Uint8Array): string {
  * @param str - A base64url-encoded string
  * @returns The decoded bytes as a Uint8Array
  */
-export function fromBase64Url(str: string): Uint8Array {
+export function fromBase64Url(str: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array(Buffer.from(str, "base64url"));
 }
