@@ -3,7 +3,6 @@ import { AuthContext, useAuthProvider } from "./hooks/useAuth.js";
 import { LoginForm } from "./components/LoginForm.js";
 import { RegisterForm } from "./components/RegisterForm.js";
 import { Layout } from "./components/Layout.js";
-import "./App.css";
 
 /**
  * Root application component.
