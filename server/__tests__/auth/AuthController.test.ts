@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from "vitest";
 import express from "express";
 import request from "supertest";
-import crypto from "node:crypto";
 import { toBase64Url, fromBase64Url } from "@mesh-chat/common";
 import { Database } from "../../src/db/Database.js";
 import { UserRepository } from "../../src/auth/UserRepository.js";
@@ -15,16 +14,23 @@ describe("AuthController", () => {
   // Generate an RSA keypair for the test user (simulates what the client does).
   // We generate this once before all tests since it's slow.
   let userPubKeyB64: string;
-  let userPrivateKey: crypto.KeyObject;
+  let userPrivateKey: CryptoKey;
 
-  beforeAll(() => {
-    // Generate a test keypair for RSASSA-PSS signatures.
+  beforeAll(async () => {
+    // Generate a test keypair for RSASSA-PSS signatures using WebCrypto.
     // This simulates the client's sig_pubkey / sig_privkey.
-    const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
-      modulusLength: 4096,
-    });
-    userPrivateKey = privateKey;
-    const pubDer = publicKey.export({ type: "spki", format: "der" });
+    const keyPair = await crypto.subtle.generateKey(
+      {
+        name: "RSA-PSS",
+        modulusLength: 4096,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      true,               // extractable — we need to export the public key
+      ["sign", "verify"],
+    );
+    userPrivateKey = keyPair.privateKey;
+    const pubDer = await crypto.subtle.exportKey("spki", keyPair.publicKey);
     userPubKeyB64 = toBase64Url(new Uint8Array(pubDer));
   });
 
@@ -158,13 +164,15 @@ describe("AuthController", () => {
       expect(loginRes.status).toBe(200);
       const { userId, nonce } = loginRes.body;
 
-      // 3. Sign the nonce with the user's private key (simulates client)
-      const nonceBytes = Buffer.from(fromBase64Url(nonce));
-      const signature = crypto.sign("sha256", nonceBytes, {
-        key: userPrivateKey,
-        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-        saltLength: 32,
-      });
+      // 3. Sign the nonce with the user's private key (simulates client).
+      //    WebCrypto's subtle.sign returns an ArrayBuffer; we wrap it
+      //    in Uint8Array and encode to base64url for the wire.
+      const nonceBytes = fromBase64Url(nonce);
+      const signature = await crypto.subtle.sign(
+        { name: "RSA-PSS", saltLength: 32 },
+        userPrivateKey,
+        nonceBytes,
+      );
       const signedNonce = toBase64Url(new Uint8Array(signature));
 
       // 4. Verify
@@ -222,12 +230,12 @@ describe("AuthController", () => {
       const { userId, nonce } = loginRes.body;
 
       // First verify attempt (with valid signature)
-      const nonceBytes = Buffer.from(fromBase64Url(nonce));
-      const signature = crypto.sign("sha256", nonceBytes, {
-        key: userPrivateKey,
-        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-        saltLength: 32,
-      });
+      const nonceBytes = fromBase64Url(nonce);
+      const signature = await crypto.subtle.sign(
+        { name: "RSA-PSS", saltLength: 32 },
+        userPrivateKey,
+        nonceBytes,
+      );
       const signedNonce = toBase64Url(new Uint8Array(signature));
 
       await request(app).post("/auth/login/verify").send({ userId, signedNonce });

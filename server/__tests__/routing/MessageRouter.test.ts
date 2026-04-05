@@ -99,8 +99,8 @@ describe("MessageRouter", () => {
       senderLink = makeSenderLink();
     });
 
-    it("calls deliverToUser with a USER_DELIVER envelope", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
+    it("calls deliverToUser with a USER_DELIVER envelope", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
 
       expect(localUserManager.deliverToUser).toHaveBeenCalledOnce();
       const [userId, envelope] = localUserManager.deliverToUser.mock.calls[0] as [string, Envelope];
@@ -108,32 +108,32 @@ describe("MessageRouter", () => {
       expect(envelope.type).toBe(ProtocolMessageType.USER_DELIVER);
     });
 
-    it("USER_DELIVER carries the ciphertext unchanged", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
+    it("USER_DELIVER carries the ciphertext unchanged", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
 
       const [, envelope] = localUserManager.deliverToUser.mock.calls[0] as [string, Envelope];
       expect(envelope.payload.ciphertext).toBe("fake-ciphertext-base64url");
       expect(envelope.payload.content_sig).toBe("content-sig-base64url");
     });
 
-    it("USER_DELIVER is addressed to the recipient", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
+    it("USER_DELIVER is addressed to the recipient", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
 
       const [, envelope] = localUserManager.deliverToUser.mock.calls[0] as [string, Envelope];
       expect(envelope.to).toBe(RECIPIENT_LOCAL_ID);
       expect(envelope.from).toBe(SERVER_ID);
     });
 
-    it("USER_DELIVER has a transport signature", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
+    it("USER_DELIVER has a transport signature", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
 
       const [, envelope] = localUserManager.deliverToUser.mock.calls[0] as [string, Envelope];
       expect(typeof envelope.sig).toBe("string");
       expect(envelope.sig!.length).toBeGreaterThan(0);
     });
 
-    it("includes the sender's username in the delivery payload", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
+    it("includes the sender's username in the delivery payload", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_LOCAL_ID), senderLink as any);
 
       const [, envelope] = localUserManager.deliverToUser.mock.calls[0] as [string, Envelope];
       expect(envelope.payload.sender).toBe("alice");
@@ -159,31 +159,31 @@ describe("MessageRouter", () => {
       senderLink = makeSenderLink();
     });
 
-    it("calls meshManager.broadcast with a SERVER_DELIVER envelope", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
+    it("calls meshManager.broadcast with a SERVER_DELIVER envelope", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
 
       expect(meshManager.broadcast).toHaveBeenCalledOnce();
       const [envelope] = meshManager.broadcast.mock.calls[0] as [Envelope];
       expect(envelope.type).toBe(ProtocolMessageType.SERVER_DELIVER);
     });
 
-    it("SERVER_DELIVER is addressed to the recipient's server", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
+    it("SERVER_DELIVER is addressed to the recipient's server", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
 
       const [envelope] = meshManager.broadcast.mock.calls[0] as [Envelope];
       expect(envelope.to).toBe(REMOTE_SERVER_ID);
     });
 
-    it("SERVER_DELIVER carries recipient userId in payload", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
+    it("SERVER_DELIVER carries recipient userId in payload", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
 
       const [envelope] = meshManager.broadcast.mock.calls[0] as [Envelope];
       expect(envelope.payload.user_id).toBe(RECIPIENT_REMOTE_ID);
       expect(envelope.payload.ciphertext).toBe("fake-ciphertext-base64url");
     });
 
-    it("SERVER_DELIVER has a transport signature", () => {
-      router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
+    it("SERVER_DELIVER has a transport signature", async () => {
+      await router.handleDirect(makeMsgDirect(RECIPIENT_REMOTE_ID), senderLink as any);
 
       const [envelope] = meshManager.broadcast.mock.calls[0] as [Envelope];
       expect(typeof envelope.sig).toBe("string");
@@ -192,7 +192,7 @@ describe("MessageRouter", () => {
   });
 
   describe("handleDirect — unknown recipient", () => {
-    it("sends ERROR back to the sender when user is not online", () => {
+    it("sends ERROR back to the sender when user is not online", async () => {
       const presenceManager = makePresenceManager(undefined);
       const senderLink = makeSenderLink();
       const router = new MessageRouter(
@@ -206,7 +206,7 @@ describe("MessageRouter", () => {
 
       // RECIPIENT_REMOTE_ID with undefined serverId → not found
       const envelope = makeMsgDirect("nonexistent-user-uuid");
-      router.handleDirect(envelope, senderLink as any);
+      await router.handleDirect(envelope, senderLink as any);
 
       expect(senderLink.send).toHaveBeenCalledOnce();
       const [errorEnvelope] = senderLink.sent;
@@ -216,7 +216,7 @@ describe("MessageRouter", () => {
   });
 
   describe("handleServerDeliver", () => {
-    it("delivers USER_DELIVER to the local recipient after verifying sig", () => {
+    it("delivers USER_DELIVER to the local recipient after verifying sig", async () => {
       const localUserManager = makeLocalUserManager();
       const presenceManager = makePresenceManager(SERVER_ID);
       const router = new MessageRouter(
@@ -246,7 +246,7 @@ describe("MessageRouter", () => {
       };
 
       const fromLink = { remoteId: "server-b" } as any;
-      router.handleServerDeliver(envelope, fromLink);
+      await router.handleServerDeliver(envelope, fromLink);
 
       expect(localUserManager.deliverToUser).toHaveBeenCalledOnce();
       const [userId, delivered] = localUserManager.deliverToUser.mock.calls[0] as [string, Envelope];

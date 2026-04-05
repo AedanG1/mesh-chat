@@ -8,12 +8,12 @@ As an AI coding agent, your role is to guide me through developing this project,
 - Socket.io (client to server WebSocket Connection)
 - uuid (UUIDs)
 - Argon2id (hashing) 
-- Native Node.js crypto library (encrypting, decrypting, signing)
+- WebCrypto library (encrypting, decrypting, signing)
 
 ## Client
 - React (client, UI)
 - Argon2id (KDF)
-- WebCrypto (AES-256-GCM, encryption, decryption, signing, CryptoKey importing/caching)
+- WebCrypto library (AES-256-GCM, encryption, decryption, signing, CryptoKey importing/caching)
 - Socket.io (client to server WebSocket Connection)
 
 ## Other

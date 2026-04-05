@@ -62,18 +62,18 @@ export class ProtocolHandler {
    * @param link     - The connection the message arrived on
    * @param rawWs    - Raw WebSocket, only needed for SERVER_HELLO_JOIN
    */
-  dispatch(envelope: Envelope, link: Link, rawWs?: WebSocket): void {
+  async dispatch(envelope: Envelope, link: Link, rawWs?: WebSocket): Promise<void> {
     switch (envelope.type) {
       // ── Server-to-Server ───────────────────────────────────────────────
 
       case ProtocolMessageType.SERVER_HELLO_JOIN:
         if (rawWs) {
-          this.meshManager.handleHelloJoin(envelope, rawWs);
+          await this.meshManager.handleHelloJoin(envelope, rawWs);
         }
         break;
 
       case ProtocolMessageType.SERVER_ANNOUNCE:
-        this.meshManager.handleAnnounce(envelope, link as ServerLink);
+        await this.meshManager.handleAnnounce(envelope, link as ServerLink);
         break;
 
       case ProtocolMessageType.SERVER_WELCOME:
@@ -89,29 +89,29 @@ export class ProtocolHandler {
       case ProtocolMessageType.USER_HELLO:
         // USER_HELLO arrives from a client on a ClientLink.
         // LocalUserManager validates, registers, and triggers gossip.
-        this.localUserManager?.handleHello(envelope, link as ClientLink);
+        await this.localUserManager?.handleHello(envelope, link as ClientLink);
         break;
 
       case ProtocolMessageType.USER_ADVERTISE:
         // Arriving from a peer server — update userLocations and gossip forward.
-        this.presenceManager?.handleAdvertise(envelope, link as ServerLink);
+        await this.presenceManager?.handleAdvertise(envelope, link as ServerLink);
         break;
 
       case ProtocolMessageType.USER_REMOVE:
         // Arriving from a peer server — conditionally remove and gossip forward.
-        this.presenceManager?.handleRemove(envelope, link as ServerLink);
+        await this.presenceManager?.handleRemove(envelope, link as ServerLink);
         break;
 
       // ── Messaging ─────────────────────────────────────────────────────
 
       case ProtocolMessageType.MSG_DIRECT:
         // From a local client: route to local or remote recipient.
-        this.messageRouter?.handleDirect(envelope, link);
+        await this.messageRouter?.handleDirect(envelope, link);
         break;
 
       case ProtocolMessageType.SERVER_DELIVER:
         // From a peer server: verify transport sig and deliver locally.
-        this.messageRouter?.handleServerDeliver(envelope, link as ServerLink);
+        await this.messageRouter?.handleServerDeliver(envelope, link as ServerLink);
         break;
 
       case ProtocolMessageType.USER_DELIVER:

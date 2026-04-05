@@ -142,7 +142,9 @@ export class MeshServer {
     // Wire: new peer links → ProtocolHandler
     this.meshManager.onPeerConnected = (link: ServerLink) => {
       link.onMessage((envelope) => {
-        this.protocolHandler.dispatch(envelope, link);
+        this.protocolHandler.dispatch(envelope, link).catch((err) =>
+          console.error("[MeshServer] dispatch error:", err),
+        );
       });
     };
 
@@ -183,7 +185,9 @@ export class MeshServer {
           return;
         }
         if (parsed.type === "SERVER_HELLO_JOIN") {
-          this.meshManager.handleHelloJoin(parsed, ws);
+          this.meshManager.handleHelloJoin(parsed, ws).catch((err) =>
+            console.error("[MeshServer] handleHelloJoin error:", err),
+          );
         } else {
           ws.close(1002, "Expected SERVER_HELLO_JOIN as first frame");
         }
@@ -212,7 +216,9 @@ export class MeshServer {
       if (link.remoteId === "") {
         link.remoteId = envelope.from;
       }
-      this.protocolHandler.dispatch(envelope, link);
+      this.protocolHandler.dispatch(envelope, link).catch((err) =>
+        console.error("[MeshServer] dispatch error:", err),
+      );
     });
   }
 

@@ -38,8 +38,8 @@ describe("PresenceManager", () => {
   });
 
   describe("advertise()", () => {
-    it("adds the user to userLocations", () => {
-      pm.advertise(USER_ID, SERVER_ID, {
+    it("adds the user to userLocations", async () => {
+      await pm.advertise(USER_ID, SERVER_ID, {
         username: "alice",
         sig_pubkey: "fake-sig-key",
         enc_pubkey: "fake-enc-key",
@@ -48,8 +48,8 @@ describe("PresenceManager", () => {
       expect(pm.getServerForUser(USER_ID)).toBe(SERVER_ID);
     });
 
-    it("broadcasts USER_ADVERTISE to mesh peers", () => {
-      pm.advertise(USER_ID, SERVER_ID, {
+    it("broadcasts USER_ADVERTISE to mesh peers", async () => {
+      await pm.advertise(USER_ID, SERVER_ID, {
         username: "alice",
         sig_pubkey: "fake-sig-key",
         enc_pubkey: "fake-enc-key",
@@ -63,8 +63,8 @@ describe("PresenceManager", () => {
       expect(broadcastEnvelope.to).toBe("*");
     });
 
-    it("includes username and public keys in the broadcast payload", () => {
-      pm.advertise(USER_ID, SERVER_ID, {
+    it("includes username and public keys in the broadcast payload", async () => {
+      await pm.advertise(USER_ID, SERVER_ID, {
         username: "alice",
         sig_pubkey: "alice-sig-key",
         enc_pubkey: "alice-enc-key",
@@ -75,8 +75,8 @@ describe("PresenceManager", () => {
       expect((env.payload.meta as any).username).toBe("alice");
     });
 
-    it("includes a transport signature on the envelope", () => {
-      pm.advertise(USER_ID, SERVER_ID, {
+    it("includes a transport signature on the envelope", async () => {
+      await pm.advertise(USER_ID, SERVER_ID, {
         username: "alice",
         sig_pubkey: "k",
         enc_pubkey: "k",
@@ -90,8 +90,8 @@ describe("PresenceManager", () => {
   });
 
   describe("remove()", () => {
-    beforeEach(() => {
-      pm.advertise(USER_ID, SERVER_ID, {
+    beforeEach(async () => {
+      await pm.advertise(USER_ID, SERVER_ID, {
         username: "alice",
         sig_pubkey: "k",
         enc_pubkey: "k",
@@ -99,29 +99,29 @@ describe("PresenceManager", () => {
       meshManager.broadcast.mockClear();
     });
 
-    it("removes the user from userLocations", () => {
-      pm.remove(USER_ID, SERVER_ID);
+    it("removes the user from userLocations", async () => {
+      await pm.remove(USER_ID, SERVER_ID);
       expect(pm.getServerForUser(USER_ID)).toBeUndefined();
     });
 
-    it("broadcasts USER_REMOVE to mesh peers", () => {
-      pm.remove(USER_ID, SERVER_ID);
+    it("broadcasts USER_REMOVE to mesh peers", async () => {
+      await pm.remove(USER_ID, SERVER_ID);
 
       expect(meshManager.broadcast).toHaveBeenCalledOnce();
       const [env] = meshManager.broadcast.mock.calls[0] as [Envelope];
       expect(env.type).toBe(ProtocolMessageType.USER_REMOVE);
     });
 
-    it("does not remove if the server id does not match", () => {
+    it("does not remove if the server id does not match", async () => {
       // Another server could have re-advertised the user (stale remove guard)
-      pm.remove(USER_ID, "wrong-server-id");
+      await pm.remove(USER_ID, "wrong-server-id");
       expect(pm.getServerForUser(USER_ID)).toBe(SERVER_ID);
       expect(meshManager.broadcast).not.toHaveBeenCalled();
     });
   });
 
   describe("handleAdvertise() — inbound gossip", () => {
-    it("updates userLocations when a valid envelope arrives", () => {
+    it("updates userLocations when a valid envelope arrives", async () => {
       const envelope: Envelope = {
         type: ProtocolMessageType.USER_ADVERTISE,
         from: "other-server",
@@ -135,12 +135,12 @@ describe("PresenceManager", () => {
       };
 
       const fakeLink = { remoteId: "other-server" } as any;
-      pm.handleAdvertise(envelope, fakeLink);
+      await pm.handleAdvertise(envelope, fakeLink);
 
       expect(pm.getServerForUser("bob-uuid")).toBe("other-server");
     });
 
-    it("drops duplicate envelopes (SeenCache)", () => {
+    it("drops duplicate envelopes (SeenCache)", async () => {
       const envelope: Envelope = {
         type: ProtocolMessageType.USER_ADVERTISE,
         from: "other-server",
@@ -154,8 +154,8 @@ describe("PresenceManager", () => {
       };
 
       const fakeLink = { remoteId: "other-server" } as any;
-      pm.handleAdvertise(envelope, fakeLink);
-      pm.handleAdvertise(envelope, fakeLink); // duplicate
+      await pm.handleAdvertise(envelope, fakeLink);
+      await pm.handleAdvertise(envelope, fakeLink); // duplicate
 
       // broadcast should only be called once
       expect(meshManager.broadcast).toHaveBeenCalledOnce();
@@ -163,7 +163,7 @@ describe("PresenceManager", () => {
   });
 
   describe("handleRemove() — inbound gossip", () => {
-    it("removes user from userLocations", () => {
+    it("removes user from userLocations", async () => {
       // First advertise from another server
       const advEnv: Envelope = {
         type: ProtocolMessageType.USER_ADVERTISE,
@@ -176,7 +176,7 @@ describe("PresenceManager", () => {
           meta: { username: "carol", sig_pubkey: "ck", enc_pubkey: "ck" },
         },
       };
-      pm.handleAdvertise(advEnv, { remoteId: "server-b" } as any);
+      await pm.handleAdvertise(advEnv, { remoteId: "server-b" } as any);
       expect(pm.getServerForUser("carol-uuid")).toBe("server-b");
 
       // Then receive the removal
@@ -187,15 +187,15 @@ describe("PresenceManager", () => {
         ts: 2000,
         payload: { user_id: "carol-uuid", server_id: "server-b" },
       };
-      pm.handleRemove(remEnv, { remoteId: "server-b" } as any);
+      await pm.handleRemove(remEnv, { remoteId: "server-b" } as any);
       expect(pm.getServerForUser("carol-uuid")).toBeUndefined();
     });
   });
 
   describe("getDirectory()", () => {
-    it("returns all online users with their metadata", () => {
-      pm.advertise("user-1", SERVER_ID, { username: "alice", sig_pubkey: "ak", enc_pubkey: "ak" });
-      pm.advertise("user-2", SERVER_ID, { username: "bob", sig_pubkey: "bk", enc_pubkey: "bk" });
+    it("returns all online users with their metadata", async () => {
+      await pm.advertise("user-1", SERVER_ID, { username: "alice", sig_pubkey: "ak", enc_pubkey: "ak" });
+      await pm.advertise("user-2", SERVER_ID, { username: "bob", sig_pubkey: "bk", enc_pubkey: "bk" });
 
       const dir = pm.getDirectory();
       expect(dir).toHaveLength(2);

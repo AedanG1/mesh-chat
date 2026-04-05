@@ -60,7 +60,7 @@ export class LocalUserManager {
    * @param envelope - The USER_HELLO envelope
    * @param link     - The client's Socket.io connection
    */
-  handleHello(envelope: Envelope, link: ClientLink): void {
+  async handleHello(envelope: Envelope, link: ClientLink): Promise<void> {
     const userId = envelope.from;
     const payload = envelope.payload as UserHelloPayload;
 
@@ -90,7 +90,7 @@ export class LocalUserManager {
     });
 
     // Advertise to the whole network that this user is now online
-    this.presenceManager.advertise(userId, this.serverId, {
+    await this.presenceManager.advertise(userId, this.serverId, {
       username: userRecord.username,
       sig_pubkey: payload.sig_pubkey,
       enc_pubkey: payload.enc_pubkey,
@@ -109,11 +109,11 @@ export class LocalUserManager {
    * Called when a user's Socket.io connection closes.
    * Removes them from localUsers and gossips USER_REMOVE to the network.
    */
-  private handleDisconnect(userId: string): void {
+  private async handleDisconnect(userId: string): Promise<void> {
     if (!this.localUsers.has(userId)) return;
 
     this.localUsers.delete(userId);
-    this.presenceManager.remove(userId, this.serverId);
+    await this.presenceManager.remove(userId, this.serverId);
 
     console.log(`[LocalUserManager] User ${userId} disconnected`);
   }

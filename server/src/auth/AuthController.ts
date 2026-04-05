@@ -1,5 +1,4 @@
 import { Router, type Request, type Response } from "express";
-import crypto from "node:crypto";
 import { v4 as uuidv4 } from "uuid";
 import { toBase64Url, fromBase64Url, NONCE_TTL_MS } from "@mesh-chat/common";
 import { ServerCrypto } from "../crypto/ServerCrypto.js";
@@ -166,8 +165,8 @@ export class AuthController {
 
       // Generate a random nonce for the client to sign.
       // 32 bytes of cryptographically secure randomness.
-      const nonceBytes = crypto.randomBytes(32);
-      const nonce = toBase64Url(new Uint8Array(nonceBytes));
+      const nonceBytes = crypto.getRandomValues(new Uint8Array(32));
+      const nonce = toBase64Url(nonceBytes);
 
       // Store the nonce with a TTL so it expires if not used promptly
       this.pendingNonces.set(user.user_id, {
@@ -233,8 +232,8 @@ export class AuthController {
 
       // Verify: the client signed the nonce bytes with their RSASSA-PSS
       // private key. We verify using their stored public key.
-      const nonceBytes = Buffer.from(fromBase64Url(challenge.nonce));
-      const valid = ServerCrypto.verify(nonceBytes, signedNonce, user.sig_pubkey);
+      const nonceBytes = fromBase64Url(challenge.nonce);
+      const valid = await ServerCrypto.verify(nonceBytes, signedNonce, user.sig_pubkey);
 
       if (!valid) {
         res.status(401).json({ error: "Invalid signature" });

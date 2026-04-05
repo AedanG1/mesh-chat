@@ -67,7 +67,7 @@ export class MessageRouter {
    * @param envelope - The MSG_DIRECT envelope from the client
    * @param senderLink - The sender's ClientLink (to send errors back to)
    */
-  handleDirect(envelope: Envelope, senderLink: Link): void {
+  async handleDirect(envelope: Envelope, senderLink: Link): Promise<void> {
     const recipientId = envelope.to;
     const senderId = envelope.from;
     const payload = envelope.payload as MsgDirectPayload;
@@ -97,11 +97,11 @@ export class MessageRouter {
     if (recipientServerId === this.serverId) {
       // ── Local delivery ──────────────────────────────────────────────────
       // Recipient is on this server. Build USER_DELIVER and push directly.
-      this.deliverLocally(recipientId, envelope.ts, payload, senderUsername);
+      await this.deliverLocally(recipientId, envelope.ts, payload, senderUsername);
     } else {
       // ── Remote delivery ─────────────────────────────────────────────────
       // Recipient is on another server. Forward as SERVER_DELIVER.
-      this.forwardToServer(recipientId, recipientServerId, envelope.ts, payload, senderUsername);
+      await this.forwardToServer(recipientId, recipientServerId, envelope.ts, payload, senderUsername);
     }
   }
 
@@ -119,21 +119,21 @@ export class MessageRouter {
    * @param envelope  - The SERVER_DELIVER envelope
    * @param fromLink  - The ServerLink the message arrived on
    */
-  handleServerDeliver(envelope: Envelope, fromLink: ServerLink): void {
+  async handleServerDeliver(envelope: Envelope, fromLink: ServerLink): Promise<void> {
     const payload = envelope.payload as ServerDeliverPayload;
 
     // 1. Verify transport signature
     const senderPubKey = this.meshManager.getPubKey(envelope.from);
     if (senderPubKey && envelope.sig) {
       const canonical = ServerCrypto.canonicalizePayload(payload);
-      if (!ServerCrypto.verify(canonical, envelope.sig, senderPubKey)) {
+      if (!await ServerCrypto.verify(canonical, envelope.sig, senderPubKey)) {
         console.warn(`[MessageRouter] Bad transport sig on SERVER_DELIVER from ${envelope.from}`);
         return;
       }
     }
 
     // 2. Build USER_DELIVER and sign it with our server's private key
-    this.deliverLocally(
+    await this.deliverLocally(
       payload.user_id,
       envelope.ts,
       {
@@ -153,12 +153,12 @@ export class MessageRouter {
    * The server signs the USER_DELIVER payload for transport integrity —
    * the recipient client will know this came from a trusted server.
    */
-  private deliverLocally(
+  private async deliverLocally(
     recipientId: string,
     originalTs: number,
     msgPayload: Pick<MsgDirectPayload, "ciphertext" | "sender_sig_pub" | "content_sig">,
     senderUsername: string,
-  ): void {
+  ): Promise<void> {
     const deliverPayload: UserDeliverPayload = {
       ciphertext: msgPayload.ciphertext,
       sender: senderUsername,
@@ -172,7 +172,7 @@ export class MessageRouter {
       to: recipientId,
       ts: Date.now(),
       payload: deliverPayload,
-      sig: this.crypto.sign(
+      sig: await this.crypto.sign(
         ServerCrypto.canonicalizePayload(deliverPayload),
       ),
     };
@@ -187,13 +187,13 @@ export class MessageRouter {
    * Build a SERVER_DELIVER envelope signed with our key and send it to
    * the peer server that hosts the recipient.
    */
-  private forwardToServer(
+  private async forwardToServer(
     recipientId: string,
     recipientServerId: string,
     originalTs: number,
     msgPayload: MsgDirectPayload,
     senderUsername: string,
-  ): void {
+  ): Promise<void> {
     const serverDeliverPayload: ServerDeliverPayload = {
       user_id: recipientId,
       ciphertext: msgPayload.ciphertext,
@@ -208,7 +208,7 @@ export class MessageRouter {
       to: recipientServerId,
       ts: Date.now(),
       payload: serverDeliverPayload,
-      sig: this.crypto.sign(
+      sig: await this.crypto.sign(
         ServerCrypto.canonicalizePayload(serverDeliverPayload),
       ),
     };

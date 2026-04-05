@@ -1,7 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { io as ioClient } from "socket.io-client";
 import type { Socket as ClientSocket } from "socket.io-client";
-import crypto from "node:crypto";
 import request from "supertest";
 import { toBase64Url, ProtocolMessageType, type Envelope } from "@mesh-chat/common";
 import { MeshServer } from "../../src/MeshServer.js";
@@ -15,13 +14,25 @@ function wait(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
 }
 
-/** Generate an RSA-4096 key pair and return base64url-encoded public keys. */
-function genKeyPair() {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 }); // 2048 for test speed
-  const pubDer = publicKey.export({ type: "spki", format: "der" });
+/**
+ * Generate an RSA-PSS key pair using WebCrypto and return the
+ * base64url-encoded public key. We use 2048-bit keys for test speed.
+ */
+async function genKeyPair() {
+  const keyPair = await crypto.subtle.generateKey(
+    {
+      name: "RSA-PSS",
+      modulusLength: 2048, // 2048 for test speed
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  );
+  const pubDer = await crypto.subtle.exportKey("spki", keyPair.publicKey);
   return {
     pubKeyB64: toBase64Url(new Uint8Array(pubDer)),
-    privateKey,
+    privateKey: keyPair.privateKey,
   };
 }
 
@@ -44,8 +55,8 @@ describe("User Presence — integration", () => {
     await wait(300); // let mesh join complete
 
     // Generate key pairs for the test user
-    const sigKeys = genKeyPair();
-    const encKeys = genKeyPair();
+    const sigKeys = await genKeyPair();
+    const encKeys = await genKeyPair();
     const clientHash = "test-client-hash-abc123";
 
     // Register the user on server A via HTTP
@@ -107,8 +118,8 @@ describe("User Presence — integration", () => {
     await wait(300);
 
     // Register + connect
-    const sigKeys = genKeyPair();
-    const encKeys = genKeyPair();
+    const sigKeys = await genKeyPair();
+    const encKeys = await genKeyPair();
 
     const regRes = await request(serverA.getApp())
       .post("/auth/register")

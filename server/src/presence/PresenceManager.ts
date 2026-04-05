@@ -78,11 +78,11 @@ export class PresenceManager {
    * @param serverId - Our own server UUID (where this user is connected)
    * @param meta     - Username and public keys to share with the network
    */
-  advertise(
+  async advertise(
     userId: string,
     serverId: string,
     meta: { username: string; sig_pubkey: string; enc_pubkey: string },
-  ): void {
+  ): Promise<void> {
     // Update our own table immediately (don't wait for gossip to loop back)
     this.userLocations.set(userId, serverId);
     this.userMeta.set(userId, meta);
@@ -103,13 +103,13 @@ export class PresenceManager {
       to: "*",
       ts: Date.now(),
       payload,
-      sig: this.crypto.sign(
+      sig: await this.crypto.sign(
         ServerCrypto.canonicalizePayload(payload),
       ),
     };
 
     // Mark as seen before broadcasting so we don't re-process our own gossip
-    this.seenCache.markSeen(envelope);
+    await this.seenCache.markSeen(envelope);
     this.meshManager.broadcast(envelope);
   }
 
@@ -117,7 +117,7 @@ export class PresenceManager {
    * Announce that a local user has gone offline.
    * Called by LocalUserManager on disconnect.
    */
-  remove(userId: string, serverId: string): void {
+  async remove(userId: string, serverId: string): Promise<void> {
     // Only remove if this server still owns the user.
     // (Another server may have already re-advertised them.)
     if (this.userLocations.get(userId) !== serverId) return;
@@ -136,12 +136,12 @@ export class PresenceManager {
       to: "*",
       ts: Date.now(),
       payload,
-      sig: this.crypto.sign(
+      sig: await this.crypto.sign(
         ServerCrypto.canonicalizePayload(payload),
       ),
     };
 
-    this.seenCache.markSeen(envelope);
+    await this.seenCache.markSeen(envelope);
     this.meshManager.broadcast(envelope);
   }
 
@@ -156,9 +156,9 @@ export class PresenceManager {
    *   3. Update userLocations[userId] = serverId
    *   4. Forward to all other peer servers (gossip)
    */
-  handleAdvertise(envelope: Envelope, fromLink: ServerLink): void {
-    if (this.seenCache.hasSeen(envelope)) return;
-    this.seenCache.markSeen(envelope);
+  async handleAdvertise(envelope: Envelope, fromLink: ServerLink): Promise<void> {
+    if (await this.seenCache.hasSeen(envelope)) return;
+    await this.seenCache.markSeen(envelope);
 
     const payload = envelope.payload as UserAdvertisePayload;
 
@@ -166,7 +166,7 @@ export class PresenceManager {
     const senderPubKey = this.meshManager.getPubKey(envelope.from);
     if (senderPubKey && envelope.sig) {
       const canonical = ServerCrypto.canonicalizePayload(payload);
-      if (!ServerCrypto.verify(canonical, envelope.sig, senderPubKey)) {
+      if (!await ServerCrypto.verify(canonical, envelope.sig, senderPubKey)) {
         console.warn(`[PresenceManager] Bad sig on USER_ADVERTISE from ${envelope.from}`);
         return;
       }
@@ -198,16 +198,16 @@ export class PresenceManager {
    *   3. Only remove if userLocations[userId] still points to that server
    *   4. Forward gossip
    */
-  handleRemove(envelope: Envelope, fromLink: ServerLink): void {
-    if (this.seenCache.hasSeen(envelope)) return;
-    this.seenCache.markSeen(envelope);
+  async handleRemove(envelope: Envelope, fromLink: ServerLink): Promise<void> {
+    if (await this.seenCache.hasSeen(envelope)) return;
+    await this.seenCache.markSeen(envelope);
 
     const payload = envelope.payload as UserRemovePayload;
 
     const senderPubKey = this.meshManager.getPubKey(envelope.from);
     if (senderPubKey && envelope.sig) {
       const canonical = ServerCrypto.canonicalizePayload(payload);
-      if (!ServerCrypto.verify(canonical, envelope.sig, senderPubKey)) {
+      if (!await ServerCrypto.verify(canonical, envelope.sig, senderPubKey)) {
         console.warn(`[PresenceManager] Bad sig on USER_REMOVE from ${envelope.from}`);
         return;
       }

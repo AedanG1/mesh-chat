@@ -90,7 +90,7 @@ export class MeshManager {
 
       const success = await this.tryJoinVia(host, port);
       if (success) {
-        this.broadcastAnnounce();
+        await this.broadcastAnnounce();
         return;
       }
     }
@@ -223,7 +223,7 @@ export class MeshManager {
    *   3. Send SERVER_WELCOME with the full network snapshot
    *   4. Register the new peer connection
    */
-  handleHelloJoin(envelope: Envelope, ws: WebSocket): void {
+  async handleHelloJoin(envelope: Envelope, ws: WebSocket): Promise<void> {
     const payload = envelope.payload as ServerHelloJoinPayload;
     let newId = envelope.from;
 
@@ -272,7 +272,7 @@ export class MeshManager {
       to: newId,
       ts: Date.now(),
       payload: welcomePayload as unknown as Record<string, unknown>,
-      sig: this.crypto.sign(
+      sig: await this.crypto.sign(
         ServerCrypto.canonicalizePayload(
           welcomePayload as unknown as Record<string, unknown>,
         ),
@@ -295,7 +295,7 @@ export class MeshManager {
    * Broadcast SERVER_ANNOUNCE to all current peers.
    * Called once after successfully joining the network.
    */
-  broadcastAnnounce(): void {
+  async broadcastAnnounce(): Promise<void> {
     const payload: ServerAnnouncePayload = {
       host: this.host,
       port: this.port,
@@ -307,14 +307,14 @@ export class MeshManager {
       to: "*",
       ts: Date.now(),
       payload: payload as unknown as Record<string, unknown>,
-      sig: this.crypto.sign(
+      sig: await this.crypto.sign(
         ServerCrypto.canonicalizePayload(
           payload as unknown as Record<string, unknown>,
         ),
       ),
     };
 
-    this.seenCache.markSeen(envelope);
+    await this.seenCache.markSeen(envelope);
     this.broadcast(envelope);
   }
 
@@ -326,9 +326,9 @@ export class MeshManager {
    * 3. Register the new peer in our tables
    * 4. Gossip forward to all other peers
    */
-  handleAnnounce(envelope: Envelope, fromLink: ServerLink): void {
-    if (this.seenCache.hasSeen(envelope)) return;
-    this.seenCache.markSeen(envelope);
+  async handleAnnounce(envelope: Envelope, fromLink: ServerLink): Promise<void> {
+    if (await this.seenCache.hasSeen(envelope)) return;
+    await this.seenCache.markSeen(envelope);
 
     const payload = envelope.payload as ServerAnnouncePayload;
     const pubKey = this.serverPubKeys.get(envelope.from);
@@ -337,7 +337,7 @@ export class MeshManager {
       const canonical = ServerCrypto.canonicalizePayload(
         payload as unknown as Record<string, unknown>,
       );
-      if (!ServerCrypto.verify(canonical, envelope.sig, pubKey)) {
+      if (!await ServerCrypto.verify(canonical, envelope.sig, pubKey)) {
         console.warn(`[MeshManager] Bad transport sig on SERVER_ANNOUNCE from ${envelope.from}`);
         return;
       }

@@ -1,84 +1,71 @@
-import crypto from "node:crypto";
 import { toBase64Url, fromBase64Url } from "@mesh-chat/common";
 
 /**
- * Handles all server-side cryptographic operations.
+ * Handles all server-side cryptographic operations using the WebCrypto API.
  *
  * Each server has exactly ONE RSASSA-PSS keypair used to sign
  * transport-level messages (the `sig` field in every Envelope).
  * Other servers verify these signatures using the public key
  * exchanged during SERVER_HELLO_JOIN / SERVER_WELCOME.
  *
+ * Why WebCrypto instead of Node's legacy crypto module?
+ *   Both the client and server now use the same crypto.subtle API.
+ *   This eliminates subtle incompatibilities between Node's crypto
+ *   and the browser's WebCrypto (different key formats, padding
+ *   options, etc.) and makes the codebase more consistent.
+ *
  * Key concepts:
- * - RSASSA-PSS is a signature algorithm (sign + verify only, NOT encryption).
+ * - RSA-PSS is a signature algorithm (sign + verify only, NOT encryption).
  * - SHA-256 is the hash algorithm used within the signature scheme.
+ * - saltLength: 32 bytes (matching the SHA-256 digest size).
  * - The private key never leaves this server.
  * - The public key is shared with all servers on the network.
  */
 export class ServerCrypto {
-  private privateKey: crypto.KeyObject;
-  private publicKey: crypto.KeyObject;
+  private privateKey: CryptoKey;
+  private publicKey: CryptoKey;
   private publicKeyB64: string; // cached base64url-encoded public key for the wire
 
   /**
    * Creates a ServerCrypto instance by generating a fresh RSA-4096 keypair.
    *
-   * This is async because key generation is CPU-intensive and we use
-   * the async variant to avoid blocking the event loop on startup.
+   * This is async because WebCrypto key generation returns a Promise.
+   * RSA-4096 generation can take 1-3 seconds — unavoidable cost of
+   * strong RSA keys.
    */
   static async create(): Promise<ServerCrypto> {
-    const { publicKey, privateKey } = await new Promise<{
-      publicKey: crypto.KeyObject;
-      privateKey: crypto.KeyObject;
-    }>((resolve, reject) => {
-      // generateKeyPair (async version) generates the keypair in a
-      // background thread so it doesn't block the main event loop.
-      // RSA-4096 key generation can take a noticeable amount of time.
-      //
-      // We use "rsa" (not "rsa-pss") because @types/node v25 removed
-      // the "rsa-pss" overload. PSS padding is applied at sign/verify
-      // time instead, which achieves the same RSASSA-PSS behavior.
-      crypto.generateKeyPair(
-        "rsa",
-        {
-          modulusLength: 4096,
-          publicKeyEncoding: { type: "spki", format: "der" },
-          privateKeyEncoding: { type: "pkcs8", format: "der" },
-        },
-        (err, publicKeyDer, privateKeyDer) => {
-          if (err) {
-            reject(err);
-            return;
-          }
-          // Convert the DER-encoded buffers back into KeyObject instances.
-          // This gives us proper KeyObject types for sign/verify operations.
-          const pubKey = crypto.createPublicKey({
-            key: publicKeyDer,
-            format: "der",
-            type: "spki",
-          });
-          const privKey = crypto.createPrivateKey({
-            key: privateKeyDer,
-            format: "der",
-            type: "pkcs8",
-          });
-          resolve({ publicKey: pubKey, privateKey: privKey });
-        }
-      );
-    });
+    // generateKey() returns a CryptoKeyPair: { publicKey, privateKey }.
+    //
+    // Parameters:
+    //   name: "RSA-PSS" — the PSS signature scheme (not PKCS#1 v1.5)
+    //   modulusLength: 4096 — key size in bits (spec requirement)
+    //   publicExponent: [1, 0, 1] — standard 65537
+    //   hash: "SHA-256" — hash algorithm used internally by PSS
+    //   extractable: true — we need to export the public key to base64url
+    //   usages: ["sign", "verify"] — the private key signs, the public key verifies
+    const keyPair = await crypto.subtle.generateKey(
+      {
+        name: "RSA-PSS",
+        modulusLength: 4096,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: "SHA-256",
+      },
+      true,                  // extractable — needed for public key export
+      ["sign", "verify"],    // private key signs, public key verifies
+    );
 
-    return new ServerCrypto(publicKey, privateKey);
+    // Export the public key as SPKI DER → base64url for the wire protocol.
+    // SPKI (Subject Public Key Info) is a standard ASN.1 format.
+    const pubDer = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+    const publicKeyB64 = toBase64Url(new Uint8Array(pubDer));
+
+    return new ServerCrypto(keyPair.publicKey, keyPair.privateKey, publicKeyB64);
   }
 
-  private constructor(publicKey: crypto.KeyObject, privateKey: crypto.KeyObject) {
+  private constructor(publicKey: CryptoKey, privateKey: CryptoKey, publicKeyB64: string) {
     this.publicKey = publicKey;
     this.privateKey = privateKey;
-
-    // Export the public key as DER (binary) format, then encode to base64url.
-    // DER is a compact binary encoding of the key -- more space-efficient
-    // than PEM which is base64-wrapped DER with header/footer lines.
-    const pubDer = publicKey.export({ type: "spki", format: "der" });
-    this.publicKeyB64 = toBase64Url(new Uint8Array(pubDer));
+    this.publicKeyB64 = publicKeyB64;
   }
 
   /** Returns the server's public key as a base64url string (for the wire protocol). */
@@ -87,20 +74,22 @@ export class ServerCrypto {
   }
 
   /**
-   * Sign data using this server's private RSASSA-PSS key.
+   * Sign data using this server's private RSA-PSS key.
+   *
+   * Now async because crypto.subtle.sign returns a Promise.
    *
    * @param data - The bytes to sign (typically from canonicalizePayload)
    * @returns The signature as a base64url string
    */
-  sign(data: Buffer): string {
-    // crypto.sign() takes the hash algorithm, the data, and a signing options
-    // object. We explicitly specify RSA-PSS padding with SHA-256 and a salt
-    // length of 32 bytes (matching the SHA-256 digest size).
-    const signature = crypto.sign("sha256", data, {
-      key: this.privateKey,
-      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: 32,
-    });
+  async sign(data: Uint8Array<ArrayBuffer>): Promise<string> {
+    // crypto.subtle.sign() applies SHA-256 internally (specified in the
+    // key's algorithm.hash), then signs with RSA-PSS padding.
+    // saltLength: 32 matches the SHA-256 digest size (recommended).
+    const signature = await crypto.subtle.sign(
+      { name: "RSA-PSS", saltLength: 32 },
+      this.privateKey,
+      data,
+    );
     return toBase64Url(new Uint8Array(signature));
   }
 
@@ -111,29 +100,37 @@ export class ServerCrypto {
    * The public key comes from the SERVER_WELCOME / SERVER_ANNOUNCE
    * payload and is pinned to the server's UUID.
    *
-   * @param data      - The original signed bytes
-   * @param signature - The base64url-encoded signature to verify
+   * Now async because both importKey and verify return Promises.
+   *
+   * @param data         - The original signed bytes
+   * @param signature    - The base64url-encoded signature to verify
    * @param publicKeyB64 - The signer's base64url-encoded public key (DER/SPKI)
    * @returns true if the signature is valid
    */
-  static verify(data: Buffer, signature: string, publicKeyB64: string): boolean {
-    // Reconstruct the KeyObject from the base64url-encoded DER bytes.
-    const pubDer = Buffer.from(fromBase64Url(publicKeyB64));
-    const publicKey = crypto.createPublicKey({
-      key: pubDer,
-      format: "der",
-      type: "spki",
-    });
+  static async verify(
+    data: Uint8Array<ArrayBuffer>,
+    signature: string,
+    publicKeyB64: string,
+  ): Promise<boolean> {
+    // Reconstruct the CryptoKey from the base64url-encoded SPKI DER bytes.
+    // The key is imported as non-extractable with "verify" usage only.
+    const pubDer = fromBase64Url(publicKeyB64);
+    const publicKey = await crypto.subtle.importKey(
+      "spki",
+      pubDer,
+      { name: "RSA-PSS", hash: "SHA-256" },
+      false,       // non-extractable
+      ["verify"],  // only need verify usage
+    );
 
-    const sigBytes = Buffer.from(fromBase64Url(signature));
+    const sigBytes = fromBase64Url(signature);
 
-    // Verify using RSASSA-PSS padding with the same SHA-256 hash and
-    // 32-byte salt length that was used during signing.
-    return crypto.verify("sha256", data, {
-      key: publicKey,
-      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: 32,
-    }, sigBytes);
+    return crypto.subtle.verify(
+      { name: "RSA-PSS", saltLength: 32 },
+      publicKey,
+      sigBytes,
+      data,
+    );
   }
 
   /**
@@ -148,9 +145,9 @@ export class ServerCrypto {
    * sorts object keys alphabetically. This handles nested objects too.
    *
    * @param payload - The payload object from an Envelope
-   * @returns A Buffer containing the canonical JSON bytes (UTF-8)
+   * @returns A Uint8Array containing the canonical JSON bytes (UTF-8)
    */
-  static canonicalizePayload(payload: Record<string, unknown>): Buffer {
+  static canonicalizePayload(payload: Record<string, unknown>): Uint8Array<ArrayBuffer> {
     // JSON.stringify's replacer receives every key. When we return
     // Object.keys(value).sort() for object values, it forces alphabetical
     // key order at every nesting level.
@@ -165,6 +162,6 @@ export class ServerCrypto {
       return value;
     });
 
-    return Buffer.from(canonical, "utf-8");
+    return new TextEncoder().encode(canonical);
   }
 }
