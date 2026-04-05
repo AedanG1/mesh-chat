@@ -3,6 +3,7 @@ import express from "express";
 import WebSocket from "ws";
 import { v4 as uuidv4 } from "uuid";
 import { isValidEnvelope } from "@mesh-chat/common";
+import type { Socket } from "socket.io";
 import { Database } from "./db/Database.js";
 import { UserRepository } from "./auth/UserRepository.js";
 import { AuthController } from "./auth/AuthController.js";
@@ -10,8 +11,11 @@ import { ServerCrypto } from "./crypto/ServerCrypto.js";
 import { PasswordService } from "./crypto/PasswordService.js";
 import { WsListener } from "./net/WsListener.js";
 import { SocketIoListener } from "./net/SocketIoListener.js";
+import { ClientLink } from "./net/ClientLink.js";
 import { MeshManager } from "./mesh/MeshManager.js";
 import { SeenCache } from "./mesh/SeenCache.js";
+import { PresenceManager } from "./presence/PresenceManager.js";
+import { LocalUserManager } from "./presence/LocalUserManager.js";
 import { ProtocolHandler } from "./routing/ProtocolHandler.js";
 import type { ServerLink } from "./net/ServerLink.js";
 
@@ -25,11 +29,11 @@ export interface MeshServerConfig {
 /**
  * Central orchestrator: owns all server components and manages their lifecycle.
  *
- * Phase 3 additions:
- *   - SeenCache         (loop avoidance for broadcast messages)
- *   - MeshManager       (mesh topology, join handshake, broadcast)
- *   - ProtocolHandler   (message dispatch hub)
- *   - WsListener wired  (routes raw WS connections to MeshManager)
+ * Phase 4 additions:
+ *   - PresenceManager    (userLocations table, USER_ADVERTISE/REMOVE gossip)
+ *   - LocalUserManager   (localUsers table, USER_HELLO → registration)
+ *   - Socket.io wired    (client connections → USER_HELLO → LocalUserManager)
+ *   - getUserLocationsSnapshot wired into MeshManager (for SERVER_WELCOME)
  */
 export class MeshServer {
   private config: MeshServerConfig;
@@ -47,10 +51,14 @@ export class MeshServer {
   private wsListener!: WsListener;
   private socketIoListener!: SocketIoListener;
 
-  // Mesh (Phase 3)
+  // Mesh (Phase 3+)
   private seenCache!: SeenCache;
   private meshManager!: MeshManager;
   private protocolHandler!: ProtocolHandler;
+
+  // Presence (Phase 4)
+  private presenceManager!: PresenceManager;
+  private localUserManager!: LocalUserManager;
 
   private serverId: string = "";
 
@@ -79,7 +87,7 @@ export class MeshServer {
     this.wsListener = new WsListener(this.httpServer);
     this.socketIoListener = new SocketIoListener(this.httpServer);
 
-    // 5. Mesh components
+    // 5. Mesh components (Phase 3)
     this.seenCache = new SeenCache();
     this.meshManager = new MeshManager(
       this.serverId,
@@ -90,40 +98,60 @@ export class MeshServer {
     );
     this.protocolHandler = new ProtocolHandler(this.meshManager);
 
-    // Wire: when MeshManager establishes any new peer link, attach
-    // the ProtocolHandler message callback to it.
+    // 6. Presence components (Phase 4)
+    this.presenceManager = new PresenceManager(
+      this.serverId,
+      this.crypto,
+      this.meshManager,
+      this.seenCache,
+    );
+    this.localUserManager = new LocalUserManager(
+      this.serverId,
+      this.presenceManager,
+      this.userRepo,
+    );
+
+    // Inject presence managers into ProtocolHandler via setter injection
+    this.protocolHandler.setPresenceManagers(
+      this.presenceManager,
+      this.localUserManager,
+    );
+
+    // Wire: plug userLocations snapshot into MeshManager so SERVER_WELCOME
+    // includes current online users when a new server joins
+    this.meshManager.getUserLocationsSnapshot = () =>
+      this.presenceManager.getUserLocationsSnapshot();
+
+    // Wire: new peer links → ProtocolHandler
     this.meshManager.onPeerConnected = (link: ServerLink) => {
       link.onMessage((envelope) => {
         this.protocolHandler.dispatch(envelope, link);
       });
     };
 
-    // Wire: when a raw WS connection arrives on /ws, read the first
-    // frame to identify whether it's a SERVER_HELLO_JOIN.
+    // Wire: raw WS connections → first-frame routing
     this.wsListener.onConnection((ws: WebSocket) => {
       this.handleIncomingWs(ws);
     });
 
-    // TODO (Phase 4): Wire socketIoListener.onConnection() for clients
+    // Wire: Socket.io client connections → ClientLink → ProtocolHandler
+    this.socketIoListener.onConnection((socket: Socket) => {
+      this.handleIncomingClient(socket);
+    });
 
-    // 6. Start listening (must be before joinNetwork so peers can call back)
+    // 7. Start listening (before joinNetwork so peers can reach us)
     await new Promise<void>((resolve) => {
       this.httpServer.listen(this.config.port, this.config.host, resolve);
     });
 
-    // 7. Join the mesh
+    // 8. Join the mesh
     await this.meshManager.joinNetwork(this.config.bootstrapList);
-
-    // Sync serverId in case the introducer reassigned it
     this.serverId = this.meshManager.getServerId();
   }
 
   /**
-   * Route a new raw WebSocket connection.
-   *
-   * We inspect the first frame to identify the peer.
-   * The spec requires SERVER_HELLO_JOIN as the first message
-   * from any connecting server.
+   * Handle an incoming server-to-server WebSocket connection.
+   * First frame must be SERVER_HELLO_JOIN.
    */
   private handleIncomingWs(ws: WebSocket): void {
     ws.once("message", (data: WebSocket.Data) => {
@@ -133,9 +161,7 @@ export class MeshServer {
           ws.close(1002, "Bad first frame");
           return;
         }
-
         if (parsed.type === "SERVER_HELLO_JOIN") {
-          // Delegate to MeshManager, which wraps the WS into a ServerLink
           this.meshManager.handleHelloJoin(parsed, ws);
         } else {
           ws.close(1002, "Expected SERVER_HELLO_JOIN as first frame");
@@ -146,23 +172,44 @@ export class MeshServer {
     });
   }
 
+  /**
+   * Handle a new Socket.io client connection.
+   *
+   * We wrap the socket in a ClientLink and attach the ProtocolHandler.
+   * The client's first message must be USER_HELLO (per the spec).
+   *
+   * We give the link a temporary remoteId of "" until USER_HELLO
+   * tells us the real userId.
+   */
+  private handleIncomingClient(socket: Socket): void {
+    // Use a placeholder ID until USER_HELLO arrives.
+    // ClientLink will update remoteId when we call handleHello.
+    const link = new ClientLink(socket, "");
+
+    link.onMessage((envelope) => {
+      // On the first message, update the link's remoteId to the real userId
+      if (link.remoteId === "") {
+        link.remoteId = envelope.from;
+      }
+      this.protocolHandler.dispatch(envelope, link);
+    });
+  }
+
   // ── Accessors ─────────────────────────────────────────────────────────────
 
   getServerId(): string { return this.serverId; }
   getCrypto(): ServerCrypto { return this.crypto; }
   getMeshManager(): MeshManager { return this.meshManager; }
+  getPresenceManager(): PresenceManager { return this.presenceManager; }
+  getLocalUserManager(): LocalUserManager { return this.localUserManager; }
   getApp(): express.Express { return this.app; }
   getHttpServer(): http.Server { return this.httpServer; }
 
   async stop(): Promise<void> {
-    // Close all peer WebSocket connections first, otherwise they keep
-    // the HTTP server alive and httpServer.close() never fires its callback.
     this.meshManager?.disconnectAll();
     this.wsListener?.close();
     this.socketIoListener?.close();
 
-    // Force-close any remaining keep-alive connections (Node 18.2+).
-    // Without this, the HTTP server waits indefinitely for idle connections.
     (this.httpServer as unknown as { closeAllConnections?: () => void })
       .closeAllConnections?.();
 
