@@ -3,6 +3,7 @@ import { ProtocolMessageType, type Envelope } from "@mesh-chat/common";
 import type { MeshManager } from "../mesh/MeshManager.js";
 import type { PresenceManager } from "../presence/PresenceManager.js";
 import type { LocalUserManager } from "../presence/LocalUserManager.js";
+import type { MessageRouter } from "./MessageRouter.js";
 import type { ServerLink } from "../net/ServerLink.js";
 import type { ClientLink } from "../net/ClientLink.js";
 import type { Link } from "../net/Link.js";
@@ -27,7 +28,7 @@ export class ProtocolHandler {
   private meshManager: MeshManager;
   private presenceManager: PresenceManager | null = null;
   private localUserManager: LocalUserManager | null = null;
-  // Phase 5: messageRouter injected here
+  private messageRouter: MessageRouter | null = null;
 
   constructor(meshManager: MeshManager) {
     this.meshManager = meshManager;
@@ -35,7 +36,6 @@ export class ProtocolHandler {
 
   /**
    * Inject Phase 4 managers after construction.
-   * Called by MeshServer once PresenceManager and LocalUserManager exist.
    *
    * We use setter injection (rather than constructor injection) here
    * because PresenceManager depends on MeshManager, and LocalUserManager
@@ -48,6 +48,11 @@ export class ProtocolHandler {
   ): void {
     this.presenceManager = presenceManager;
     this.localUserManager = localUserManager;
+  }
+
+  /** Inject Phase 5 MessageRouter after construction. */
+  setMessageRouter(messageRouter: MessageRouter): void {
+    this.messageRouter = messageRouter;
   }
 
   /**
@@ -97,12 +102,20 @@ export class ProtocolHandler {
         this.presenceManager?.handleRemove(envelope, link as ServerLink);
         break;
 
-      // ── Messaging (Phase 5) ───────────────────────────────────────────
+      // ── Messaging ─────────────────────────────────────────────────────
 
       case ProtocolMessageType.MSG_DIRECT:
+        // From a local client: route to local or remote recipient.
+        this.messageRouter?.handleDirect(envelope, link);
+        break;
+
       case ProtocolMessageType.SERVER_DELIVER:
+        // From a peer server: verify transport sig and deliver locally.
+        this.messageRouter?.handleServerDeliver(envelope, link as ServerLink);
+        break;
+
       case ProtocolMessageType.USER_DELIVER:
-        // TODO Phase 5: delegate to MessageRouter
+        // USER_DELIVER is only sent BY the server TO clients, never received.
         break;
 
       // ── Control ───────────────────────────────────────────────────────

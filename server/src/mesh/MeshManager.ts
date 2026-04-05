@@ -393,4 +393,12 @@ export class MeshManager {
   hasPeer(id: string): boolean { return this.servers.has(id); }
   getServerAddr(id: string): ServerAddr | undefined { return this.serverAddrs.get(id); }
   getPubKey(id: string): string | undefined { return this.serverPubKeys.get(id); }
+
+  /**
+   * Returns a snapshot of all currently connected peer links.
+   * Used by HeartbeatManager to check liveness without exposing the Map directly.
+   */
+  getPeerEntries(): [string, ServerLink][] {
+    return [...this.servers.entries()];
+  }
 }

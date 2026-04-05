@@ -17,6 +17,7 @@ import { SeenCache } from "./mesh/SeenCache.js";
 import { PresenceManager } from "./presence/PresenceManager.js";
 import { LocalUserManager } from "./presence/LocalUserManager.js";
 import { ProtocolHandler } from "./routing/ProtocolHandler.js";
+import { MessageRouter } from "./routing/MessageRouter.js";
 import type { ServerLink } from "./net/ServerLink.js";
 
 export interface MeshServerConfig {
@@ -59,6 +60,9 @@ export class MeshServer {
   // Presence (Phase 4)
   private presenceManager!: PresenceManager;
   private localUserManager!: LocalUserManager;
+
+  // Routing (Phase 5)
+  private messageRouter!: MessageRouter;
 
   private serverId: string = "";
 
@@ -116,6 +120,17 @@ export class MeshServer {
       this.presenceManager,
       this.localUserManager,
     );
+
+    // Phase 5: MessageRouter needs all the components above to exist first
+    this.messageRouter = new MessageRouter(
+      this.serverId,
+      this.crypto,
+      this.presenceManager,
+      this.localUserManager,
+      this.meshManager,
+      this.userRepo,
+    );
+    this.protocolHandler.setMessageRouter(this.messageRouter);
 
     // Wire: plug userLocations snapshot into MeshManager so SERVER_WELCOME
     // includes current online users when a new server joins
