@@ -17,7 +17,7 @@ interface LoginFormProps {
 export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
   const { login, loading, error } = useAuth();
 
-  const [serverUrl, setServerUrl] = useState("http://127.0.0.1:3000");
+  const [serverUrl, setServerUrl] = useState("http://127.0.0.1:9000");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -49,7 +49,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
           type="text"
           value={serverUrl}
           onChange={(e) => setServerUrl(e.target.value)}
-          placeholder="http://127.0.0.1:3000"
+          placeholder="http://localhost:3001"
           required
           className="px-3 py-2 bg-gray-950 border border-gray-700 rounded text-gray-200 text-sm focus:outline-none focus:border-blue-500"
         />

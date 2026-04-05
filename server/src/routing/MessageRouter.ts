@@ -170,7 +170,7 @@ export class MessageRouter {
       type: ProtocolMessageType.USER_DELIVER,
       from: this.serverId,
       to: recipientId,
-      ts: Date.now(),
+      ts: originalTs,
       payload: deliverPayload,
       sig: await this.crypto.sign(
         ServerCrypto.canonicalizePayload(deliverPayload),

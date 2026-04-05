@@ -81,17 +81,46 @@ export class MeshManager {
    *             and broadcasts SERVER_ANNOUNCE to announce our presence.
    * On failure (all unreachable): starts as the seed node.
    */
-  async joinNetwork(bootstrapList: string[]): Promise<void> {
-    for (const addr of bootstrapList) {
-      const [host, portStr] = addr.split(":");
-      const port = parseInt(portStr, 10);
+  /**
+   * Attempt to join the mesh by trying each address in the bootstrap list.
+   *
+   * @param bootstrapList  - Addresses to try (e.g. ["server1:3001", "server2:3002"])
+   * @param maxRetries     - How many times to retry the full list (default 5 for Docker)
+   * @param baseDelayMs    - Base delay between retries in ms; actual delay = base * attempt
+   */
+  async joinNetwork(
+    bootstrapList: string[],
+    maxRetries: number = 5,
+    baseDelayMs: number = 2000,
+  ): Promise<void> {
+    // Retry the entire bootstrap list up to maxRetries times with increasing delays.
+    // This handles Docker startup race conditions where depends_on only waits
+    // for the container to start, not for the server app to be listening.
+    const MAX_RETRIES = maxRetries;
+    const BASE_DELAY_MS = baseDelayMs;
 
-      if (host === this.host && port === this.port) continue;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      for (const addr of bootstrapList) {
+        const [host, portStr] = addr.split(":");
+        const port = parseInt(portStr, 10);
 
-      const success = await this.tryJoinVia(host, port);
-      if (success) {
-        await this.broadcastAnnounce();
-        return;
+        if (host === this.host && port === this.port) continue;
+
+        const success = await this.tryJoinVia(host, port);
+        if (success) {
+          await this.broadcastAnnounce();
+          return;
+        }
+      }
+
+      // If this isn't the last attempt, wait before retrying
+      if (attempt < MAX_RETRIES - 1) {
+        const delay = BASE_DELAY_MS * (attempt + 1);
+        console.log(
+          `[MeshManager] Bootstrap attempt ${attempt + 1}/${MAX_RETRIES} failed. ` +
+          `Retrying in ${delay}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 

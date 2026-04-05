@@ -20,14 +20,10 @@ function App() {
   const auth = useAuthProvider();
   const [authView, setAuthView] = useState<"login" | "register">("login");
 
-  // Default server URL — matches what the auth forms default to.
-  // In production/Docker, this would come from env vars.
-  const serverUrl = "http://127.0.0.1:3000";
-
   return (
     <AuthContext.Provider value={auth}>
       {auth.session ? (
-        <Layout serverUrl={serverUrl} />
+        <Layout serverUrl={auth.session.serverUrl} />
       ) : (
         <div className="flex items-center justify-center min-h-screen p-4 bg-gray-950">
           {authView === "login" ? (

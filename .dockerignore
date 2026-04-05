@@ -7,6 +7,7 @@ node_modules
 
 # Compiled output (rebuilt inside the container)
 */dist
+**/*.tsbuildinfo
 
 # Test files and configs
 **/__tests__

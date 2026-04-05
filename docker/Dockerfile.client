@@ -4,9 +4,16 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy workspace manifests for layer caching.
+# Copy ALL workspace manifests before npm ci.
+# npm ci uses the lock file which was generated with all three workspaces
+# (common, server, client). If any workspace directory is missing from the
+# Docker context, npm ci can't fully resolve the workspace graph and may
+# fail to create the node_modules symlinks for the present workspaces.
+# Copying server/package.json gives npm ci the full workspace layout it
+# expects — even though we don't need the server source here.
 COPY package.json package-lock.json ./
 COPY common/package.json ./common/
+COPY server/package.json ./server/
 COPY client/package.json ./client/
 
 RUN npm ci

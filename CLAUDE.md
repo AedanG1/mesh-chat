@@ -221,7 +221,7 @@ When a user sends a Direct Message to another user on the network the server mus
     }
   ```
 Sender Client behavior:
-1. Alice wants to send a message to Bob. Alice's client is responsible for encrypting the plaintext, creating a hash of the ts field and encrypting that hash with Alice's own private key to create a content_sig for Bob to verify with Alice's public key before it gets sent to Alice's local server for delivery. 
+1. Alice wants to send a message to Bob. Alice's client is responsible for encrypting the plaintext, creating a hash of the ciphertext field and encrypting that hash with Alice's own private key to create a content_sig for Bob to verify with Alice's public key before it gets sent to Alice's local server for delivery. 
 
 Server behavior:
 1. If user_locations[sender_user_id] == "local" –> send USER_DELIVER directly to the
@@ -261,7 +261,7 @@ recipient.
   - Once the recipient's local server receives this SERVER_DELIVER message, the recipient's local server has to verify the transport signature, "sig", using the sender server's public key. Once the recipient server decrypts the transport signature, it hashes the payload and compares it to the decrypted transport signature hash. Only once that's been verified does the recipient server create a USER_DELIVER message out of the payload in SERVER_DELIVER message to send to the recipient's client.
 
 Recipient Client behavior:
-Once the recipient client gets the USER_DELIVER message, it has to verify the content_sig by using the sender_user's public key to decrypt the content_sig. Once the content_sig hash is decrypted, the recipient client can hash the ts field and compare to verify the contents weren't changed. It can then decrypt the ciphertext with the recipient user's private key.
+Once the recipient client gets the USER_DELIVER message, it has to verify the content_sig by using the sender_user's public key to decrypt the content_sig. Once the content_sig hash is decrypted, the recipient client can hash the ciphertext field and compare to verify the contents weren't changed. It can then decrypt the ciphertext with the recipient user's private key.
 
 Error Handling:
 If no recipient user is found, emit ERROR(USER_NOT_FOUND) upstream.
@@ -279,7 +279,7 @@ presence when deliveries fail or when new gossip is received.
 
 # Signing and Verification
 - Content signature (content_sig) covers only end-to-end fields:
-  - For DM: SHA256(ts field)
+  - For DM: SHA256(ciphertext field)
 - Transport signature (sig in envelope) covers payload object only (canonicalised with JSON
 key sort; no whitespace variation).
 - Key sources:

@@ -13,6 +13,7 @@ import { KeyManager } from "../crypto/KeyManager.js";
 export interface Session {
   userId: string;
   username: string;
+  serverUrl: string;    // base URL of the server this session belongs to
   enc_pubkey: string;   // base64url SPKI — our encryption public key
   sig_pubkey: string;   // base64url SPKI — our signing public key
   clientCrypto: ClientCrypto;  // holds both private keys in memory
@@ -204,15 +205,17 @@ export class AuthStore {
     // but cannot be read back out.
     await tempCrypto.importPrivateKeys(encPrivKeyBytes, sigPrivKeyBytes, enc_pubkey, sig_pubkey);
 
-    this.session = {
+    const session: Session = {
       userId,
       username: verifiedUsername,
+      serverUrl,
       enc_pubkey,
       sig_pubkey,
       clientCrypto: tempCrypto,
     };
 
-    return this.session;
+    this.session = session;
+    return session;
   }
 
   // ── Logout ────────────────────────────────────────────────────────────────

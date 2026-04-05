@@ -19,6 +19,7 @@
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
+    "jsdom": "^28.1.0",
     "socket.io-client": "^4.8.3",
     "supertest": "^7.2.2",
     "tsx": "^4.21.0",

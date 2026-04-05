@@ -112,25 +112,32 @@ export class ServerCrypto {
     signature: string,
     publicKeyB64: string,
   ): Promise<boolean> {
-    // Reconstruct the CryptoKey from the base64url-encoded SPKI DER bytes.
-    // The key is imported as non-extractable with "verify" usage only.
-    const pubDer = fromBase64Url(publicKeyB64);
-    const publicKey = await crypto.subtle.importKey(
-      "spki",
-      pubDer,
-      { name: "RSA-PSS", hash: "SHA-256" },
-      false,       // non-extractable
-      ["verify"],  // only need verify usage
-    );
+    try {
+      // Reconstruct the CryptoKey from the base64url-encoded SPKI DER bytes.
+      // The key is imported as non-extractable with "verify" usage only.
+      const pubDer = fromBase64Url(publicKeyB64);
+      const publicKey = await crypto.subtle.importKey(
+        "spki",
+        pubDer,
+        { name: "RSA-PSS", hash: "SHA-256" },
+        false,       // non-extractable
+        ["verify"],  // only need verify usage
+      );
 
-    const sigBytes = fromBase64Url(signature);
+      const sigBytes = fromBase64Url(signature);
 
-    return crypto.subtle.verify(
-      { name: "RSA-PSS", saltLength: 32 },
-      publicKey,
-      sigBytes,
-      data,
-    );
+      return await crypto.subtle.verify(
+        { name: "RSA-PSS", saltLength: 32 },
+        publicKey,
+        sigBytes,
+        data,
+      );
+    } catch {
+      // Malformed base64url, invalid key bytes, or corrupt signature bytes
+      // all surface as thrown errors. For verification purposes these are
+      // the same as an invalid signature — return false.
+      return false;
+    }
   }
 
   /**

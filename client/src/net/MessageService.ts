@@ -25,7 +25,7 @@ export interface ParsedMessage {
  *
  *   BUILD (outgoing): Given a plaintext message and the recipient's
  *   public key, produces a complete MSG_DIRECT envelope ready to send.
- *   This includes encrypting the content and signing the timestamp.
+ *   This includes encrypting the content and signing the ciphertext.
  *
  *   PARSE (incoming): Given a USER_DELIVER envelope from the server,
  *   decrypts the ciphertext and verifies the sender's content signature.
@@ -85,12 +85,19 @@ export class MessageService {
     //    Only the recipient (with their private key) can decrypt this.
     const ciphertext = await ClientCrypto.encrypt(plaintext, recipientEncPub);
 
-    // 3. Sign the timestamp.
-    //    Per spec: content_sig covers SHA256(ts field).
-    //    RSA-PSS applies SHA-256 internally, so we sign String(ts) and
-    //    the effective coverage is PSS-Sign(SHA256(ts_string_utf8_bytes)).
-    //    The recipient verifies with: ClientCrypto.verify(String(ts), sig, senderSigPub).
-    const content_sig = await clientCrypto.sign(String(ts));
+    // 3. Sign the ciphertext.
+    //    Per spec: content_sig covers the ciphertext field (base64url string).
+    //    RSA-PSS applies SHA-256 internally, so we sign the ciphertext string
+    //    and the effective coverage is PSS-Sign(SHA256(ciphertext_utf8_bytes)).
+    //    The recipient verifies with: ClientCrypto.verify(ciphertext, sig, senderSigPub).
+    //
+    //    Why ciphertext instead of timestamp?
+    //    The ciphertext is present in every envelope along the routing chain
+    //    (MSG_DIRECT → SERVER_DELIVER → USER_DELIVER). The timestamp can get
+    //    replaced when the server creates a new envelope for forwarding.
+    //    Signing the ciphertext guarantees the encrypted content wasn't
+    //    tampered with, regardless of how many hops it takes.
+    const content_sig = await clientCrypto.sign(ciphertext);
 
     const payload: MsgDirectPayload = {
       ciphertext,
@@ -136,10 +143,11 @@ export class MessageService {
     const plaintext = await clientCrypto.decrypt(payload.ciphertext);
 
     // 2. Verify the content signature.
-    //    The sender signed String(ts) with their RSASSA-PSS private key.
+    //    The sender signed the ciphertext string with their RSASSA-PSS private key.
     //    We verify with the sender's public key included in the payload.
+    //    This proves the encrypted content wasn't tampered with in transit.
     const verified = await ClientCrypto.verify(
-      String(envelope.ts),
+      payload.ciphertext,
       payload.content_sig,
       payload.sender_sig_pub,
     );

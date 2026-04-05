@@ -11,6 +11,8 @@ async function startServer(port: number, bootstrapList: string[] = []): Promise<
     port,
     dbPath: ":memory:",
     bootstrapList,
+    meshJoinRetries: 1,     // no retries in tests — avoids multi-second delays
+    meshJoinBaseDelay: 0,
   });
   await server.start();
   return server;

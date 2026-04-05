@@ -11,7 +11,7 @@ import { toBase64Url, fromBase64Url } from "@mesh-chat/common";
  *
  *   2. Signing pair (RSASSA-PSS, SHA-256, saltLength 32)
  *      - Public key:  given to other users so they can verify our signatures
- *      - Private key: used to sign outgoing message timestamps (content_sig)
+ *      - Private key: used to sign outgoing ciphertext (content_sig)
  *
  * Why two separate pairs?
  *   RSA-OAEP and RSASSA-PSS are different algorithms with different
@@ -248,14 +248,12 @@ export class ClientCrypto {
   /**
    * Sign data with our RSASSA-PSS private key.
    *
-   * Per spec, the content_sig covers SHA256(ts). In practice the caller
-   * hashes the ts field and passes the hash bytes here, or we can sign
-   * the ts bytes directly — RSASSA-PSS internally hashes with SHA-256.
+   * Per spec, the content_sig covers SHA256(ciphertext). We sign the
+   * ciphertext string bytes directly — RSASSA-PSS internally hashes
+   * with SHA-256, so the effective coverage is:
+   * PSS-Sign(SHA256(ciphertext_utf8_bytes)).
    *
-   * We sign the raw ts string bytes. The PSS algorithm applies SHA-256
-   * internally, so the effective coverage is: PSS-Sign(SHA256(ts_bytes)).
-   *
-   * @param data - The data to sign (typically the ts field as a string)
+   * @param data - The data to sign (typically the ciphertext base64url string)
    * @returns base64url-encoded signature
    */
   async sign(data: string): Promise<string> {

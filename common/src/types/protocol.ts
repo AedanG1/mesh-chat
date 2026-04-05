@@ -119,7 +119,7 @@ export interface UserHelloPayload extends BasePayload {
 export interface MsgDirectPayload extends BasePayload {
   ciphertext: string;     // base64url RSA-OAEP(SHA-256) ciphertext (max 446 bytes plaintext)
   sender_sig_pub: string; // base64url RSASSA-PSS public key of sender
-  content_sig: string;    // base64url RSASSA-PSS(SHA-256) signature over the ts field
+  content_sig: string;    // base64url RSASSA-PSS(SHA-256) signature over the ciphertext field
 }
 
 // ── Server-to-User / Server-to-Server Delivery Payloads ─────

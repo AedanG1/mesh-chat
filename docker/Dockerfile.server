@@ -4,21 +4,25 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy workspace manifests first so Docker can cache the npm ci layer.
-# If only source files change (not package.json / lock file), Docker reuses
-# the cached node_modules layer and skips the slow npm ci step.
+# Copy ALL workspace manifests before npm ci so it can resolve the full
+# workspace graph from the lock file (see Dockerfile.client for details).
 COPY package.json package-lock.json ./
 COPY common/package.json ./common/
 COPY server/package.json ./server/
+COPY client/package.json ./client/
 
 RUN npm ci
 
-# Copy source and shared TS config, then build both packages in order.
-# common must be built first because server imports from @mesh-chat/common.
+# Copy source and shared TS config.
+# We also copy common/ because the server's tsconfig references it as a
+# composite project — `tsc --build` will build common first, then server.
 COPY tsconfig.base.json ./
 COPY common/ ./common/
 COPY server/ ./server/
 
+# Build common first so common/dist/*.d.ts exists when server compiles.
+# The server imports @mesh-chat/common, which resolves via the workspace
+# symlink (node_modules/@mesh-chat/common → ../../common) to common/dist/.
 RUN npm run build -w @mesh-chat/common && npm run build -w @mesh-chat/server
 
 

@@ -30,6 +30,12 @@ export interface MeshServerConfig {
   advertiseHost?: string;
   dbPath: string;
   bootstrapList: string[];
+  /** Max times to retry the bootstrap list when joining the mesh.
+   *  Default 5 — high enough for Docker startup races. Set to 1 in tests. */
+  meshJoinRetries?: number;
+  /** Base delay (ms) between mesh join retries. Actual delay = base * attempt.
+   *  Default 2000. Set to 0 in tests. */
+  meshJoinBaseDelay?: number;
 }
 
 /**
@@ -178,7 +184,11 @@ export class MeshServer {
     });
 
     // 8. Join the mesh
-    await this.meshManager.joinNetwork(this.config.bootstrapList);
+    await this.meshManager.joinNetwork(
+      this.config.bootstrapList,
+      this.config.meshJoinRetries,
+      this.config.meshJoinBaseDelay,
+    );
     this.serverId = this.meshManager.getServerId();
 
     // 9. Start heartbeat loop (after join so serverId is finalised)
