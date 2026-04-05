@@ -1,0 +1,24 @@
+# Exclude everything that isn't needed for the Docker build.
+# This keeps the build context small and fast.
+
+# Dependencies (re-installed inside the container)
+node_modules
+*/node_modules
+
+# Compiled output (rebuilt inside the container)
+*/dist
+
+# Test files and configs
+**/__tests__
+**/*.test.ts
+**/vitest.config.*
+
+# Dev tooling
+.git
+.gitignore
+*.md
+
+# Editor / OS
+.vscode
+.DS_Store
+*.swp

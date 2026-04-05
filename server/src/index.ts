@@ -15,13 +15,16 @@ import { MeshServer } from "./MeshServer.js";
 async function main(): Promise<void> {
   const host = process.env.SERVER_HOST ?? "0.0.0.0";
   const port = parseInt(process.env.SERVER_PORT ?? "9000", 10);
+  // In Docker, SERVER_ADVERTISE_HOST is the container name that peers use to
+  // reach this server (e.g. "server1"). Locally it defaults to "127.0.0.1".
+  const advertiseHost = process.env.SERVER_ADVERTISE_HOST ?? "127.0.0.1";
   const dbPath = process.env.DB_PATH ?? "./mesh-chat.db";
   const bootstrapList = (process.env.BOOTSTRAP_LIST ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
-  const server = new MeshServer({ host, port, dbPath, bootstrapList });
+  const server = new MeshServer({ host, port, advertiseHost, dbPath, bootstrapList });
 
   await server.start();
 

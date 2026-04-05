@@ -1,5 +1,6 @@
 import http from "node:http";
 import express from "express";
+import cors from "cors";
 import WebSocket from "ws";
 import { v4 as uuidv4 } from "uuid";
 import { isValidEnvelope } from "@mesh-chat/common";
@@ -24,6 +25,9 @@ import type { ServerLink } from "./net/ServerLink.js";
 export interface MeshServerConfig {
   host: string;
   port: number;
+  /** The hostname/IP this server advertises to peers for inbound connections.
+   *  In Docker this is the container name (e.g. "server1"). Defaults to `host`. */
+  advertiseHost?: string;
   dbPath: string;
   bootstrapList: string[];
 }
@@ -82,6 +86,10 @@ export class MeshServer {
 
     // 3. Express + auth routes
     this.app = express();
+    // Allow cross-origin requests from the browser client.
+    // In development and Docker (Option B), the client origin differs from the
+    // server port, so we permit all origins here.
+    this.app.use(cors());
     this.app.use(express.json());
     this.passwordService = new PasswordService();
     this.userRepo = new UserRepository(this.db);
@@ -97,7 +105,7 @@ export class MeshServer {
     this.seenCache = new SeenCache();
     this.meshManager = new MeshManager(
       this.serverId,
-      this.config.host,
+      this.config.advertiseHost ?? this.config.host,
       this.config.port,
       this.crypto,
       this.seenCache,

@@ -1,0 +1,49 @@
+# ── Stage 1: Build ──────────────────────────────────────────────────────────
+# Compile TypeScript for both `common` and `server` packages.
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy workspace manifests first so Docker can cache the npm ci layer.
+# If only source files change (not package.json / lock file), Docker reuses
+# the cached node_modules layer and skips the slow npm ci step.
+COPY package.json package-lock.json ./
+COPY common/package.json ./common/
+COPY server/package.json ./server/
+
+RUN npm ci
+
+# Copy source and shared TS config, then build both packages in order.
+# common must be built first because server imports from @mesh-chat/common.
+COPY tsconfig.base.json ./
+COPY common/ ./common/
+COPY server/ ./server/
+
+RUN npm run build -w @mesh-chat/common && npm run build -w @mesh-chat/server
+
+
+# ── Stage 2: Production image ────────────────────────────────────────────────
+# Start fresh — only copy the compiled output and production dependencies.
+# This keeps the final image lean (no TypeScript compiler, no source files).
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Re-install only production dependencies. npm workspaces creates a symlink
+# node_modules/@mesh-chat/common → ../../common, so we need the workspace
+# structure present even in production.
+COPY package.json package-lock.json ./
+COPY common/package.json ./common/
+COPY server/package.json ./server/
+RUN npm ci --omit=dev
+
+# Copy compiled output from the builder stage.
+COPY --from=builder /app/common/dist ./common/dist
+COPY --from=builder /app/server/dist ./server/dist
+
+# SQLite database will be stored in /data (mounted as a Docker volume).
+RUN mkdir -p /data
+
+EXPOSE 9000
+
+CMD ["node", "server/dist/index.js"]

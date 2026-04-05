@@ -1,0 +1,101 @@
+name: mesh-chat
+
+# ── Shared build context ─────────────────────────────────────────────────────
+# Both Dockerfiles are built from the repo root so they can COPY the full
+# workspace (common + server/client). The `context: ..` means Docker sends
+# the parent directory as the build context.
+
+services:
+
+  # ── Server 1 (seed node) ─────────────────────────────────────────────────
+  # First to start — no BOOTSTRAP_LIST so it initialises as the seed.
+  # Exposed on host port 3001 so the browser can reach it directly.
+  server1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    ports:
+      - "3001:9000"
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "9000"
+      # The hostname that peer servers will use to open a WebSocket back to
+      # this container. Docker's internal DNS resolves container names on the
+      # shared bridge network, so "server1" works here.
+      SERVER_ADVERTISE_HOST: "server1"
+      DB_PATH: "/data/mesh.db"
+      # No BOOTSTRAP_LIST → this server starts as the sole seed node.
+      BOOTSTRAP_LIST: ""
+    volumes:
+      - server1-data:/data
+    networks:
+      - mesh-network
+
+  # ── Server 2 ─────────────────────────────────────────────────────────────
+  server2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    ports:
+      - "3002:9000"
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "9000"
+      SERVER_ADVERTISE_HOST: "server2"
+      DB_PATH: "/data/mesh.db"
+      # server1:9000 uses Docker's internal DNS — resolves to server1's
+      # container IP on the mesh-network bridge, not the host-mapped port.
+      BOOTSTRAP_LIST: "server1:9000"
+    volumes:
+      - server2-data:/data
+    networks:
+      - mesh-network
+    depends_on:
+      - server1
+
+  # ── Server 3 ─────────────────────────────────────────────────────────────
+  server3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    ports:
+      - "3003:9000"
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "9000"
+      SERVER_ADVERTISE_HOST: "server3"
+      DB_PATH: "/data/mesh.db"
+      BOOTSTRAP_LIST: "server1:9000,server2:9000"
+    volumes:
+      - server3-data:/data
+    networks:
+      - mesh-network
+    depends_on:
+      - server1
+      - server2
+
+  # ── Client (nginx serving the Vite build) ────────────────────────────────
+  # Accessible at http://localhost:5173 in the browser.
+  # Users pick which server to connect to via the login form URL field.
+  client:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.client
+    ports:
+      - "5173:5173"
+    networks:
+      - mesh-network
+
+# ── Persistent volumes ───────────────────────────────────────────────────────
+# Each server gets its own volume so the SQLite database survives restarts.
+volumes:
+  server1-data:
+  server2-data:
+  server3-data:
+
+# ── Network ──────────────────────────────────────────────────────────────────
+# A dedicated bridge network gives containers stable DNS names (their service
+# names) and isolates mesh traffic from the host network.
+networks:
+  mesh-network:
+    driver: bridge
