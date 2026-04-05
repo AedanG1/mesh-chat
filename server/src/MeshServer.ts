@@ -13,6 +13,7 @@ import { WsListener } from "./net/WsListener.js";
 import { SocketIoListener } from "./net/SocketIoListener.js";
 import { ClientLink } from "./net/ClientLink.js";
 import { MeshManager } from "./mesh/MeshManager.js";
+import { HeartbeatManager } from "./mesh/HeartbeatManager.js";
 import { SeenCache } from "./mesh/SeenCache.js";
 import { PresenceManager } from "./presence/PresenceManager.js";
 import { LocalUserManager } from "./presence/LocalUserManager.js";
@@ -55,6 +56,7 @@ export class MeshServer {
   // Mesh (Phase 3+)
   private seenCache!: SeenCache;
   private meshManager!: MeshManager;
+  private heartbeatManager!: HeartbeatManager;
   private protocolHandler!: ProtocolHandler;
 
   // Presence (Phase 4)
@@ -162,6 +164,10 @@ export class MeshServer {
     // 8. Join the mesh
     await this.meshManager.joinNetwork(this.config.bootstrapList);
     this.serverId = this.meshManager.getServerId();
+
+    // 9. Start heartbeat loop (after join so serverId is finalised)
+    this.heartbeatManager = new HeartbeatManager(this.meshManager, this.serverId);
+    this.heartbeatManager.start();
   }
 
   /**
@@ -221,6 +227,7 @@ export class MeshServer {
   getHttpServer(): http.Server { return this.httpServer; }
 
   async stop(): Promise<void> {
+    this.heartbeatManager?.stop();
     this.meshManager?.disconnectAll();
     this.wsListener?.close();
     this.socketIoListener?.close();
