@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { useAuth } from "../hooks/useAuth.js";
 
 /**
@@ -21,7 +21,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     try {
       await login(serverUrl, username, password);
