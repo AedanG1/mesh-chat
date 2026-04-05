@@ -48,8 +48,25 @@ export interface Envelope {
 
 // ── Server-to-Server Payloads ────────────────────────────────
 
+/**
+ * Base interface for all payload types.
+ *
+ * Adding `[key: string]: unknown` as an index signature makes every
+ * payload interface structurally assignable to `Record<string, unknown>`
+ * (the type of Envelope.payload). Without this, TypeScript would require
+ * explicit casts at every assignment site.
+ *
+ * This is safe because:
+ *   1. The specific named fields still exist and are still typed
+ *   2. The index signature just says "additional unknown keys are allowed"
+ *   3. Callers reading known fields get proper types; unknown fields are `unknown`
+ */
+interface BasePayload {
+  [key: string]: unknown;
+}
+
 /** Payload for SERVER_HELLO_JOIN: a new server announcing itself to an introducer. */
-export interface ServerHelloJoinPayload {
+export interface ServerHelloJoinPayload extends BasePayload {
   host: string;
   port: number;
   sig_pubkey: string; // base64url RSASSA-PSS public key
@@ -60,7 +77,7 @@ export interface ServerHelloJoinPayload {
  * Contains the assigned server ID and a snapshot of the entire network state
  * so the joining server can initialize its in-memory tables.
  */
-export interface ServerWelcomePayload {
+export interface ServerWelcomePayload extends BasePayload {
   assigned_id: string;
   servers: Record<string, { host: string; port: number; sig_pubkey: string }>;
   serverAddrs: Record<string, [string, number]>;
@@ -68,7 +85,7 @@ export interface ServerWelcomePayload {
 }
 
 /** Payload for SERVER_ANNOUNCE: broadcast after a server joins the network. */
-export interface ServerAnnouncePayload {
+export interface ServerAnnouncePayload extends BasePayload {
   host: string;
   port: number;
   sig_pubkey: string; // base64url RSASSA-PSS public key
@@ -77,14 +94,14 @@ export interface ServerAnnouncePayload {
 // ── User Presence Payloads ───────────────────────────────────
 
 /** Payload for USER_ADVERTISE: server tells the network a user is online. */
-export interface UserAdvertisePayload {
+export interface UserAdvertisePayload extends BasePayload {
   user_id: string;
   server_id: string;
   meta: Record<string, unknown>;
 }
 
 /** Payload for USER_REMOVE: server tells the network a user went offline. */
-export interface UserRemovePayload {
+export interface UserRemovePayload extends BasePayload {
   user_id: string;
   server_id: string;
 }
@@ -92,14 +109,14 @@ export interface UserRemovePayload {
 // ── User-to-Server Payloads ──────────────────────────────────
 
 /** Payload for USER_HELLO: client announces itself to its local server after login. */
-export interface UserHelloPayload {
+export interface UserHelloPayload extends BasePayload {
   client: string;
   sig_pubkey: string;  // base64url RSASSA-PSS public key (for signature verification)
   enc_pubkey: string;  // base64url RSA-OAEP public key (for encrypting messages to this user)
 }
 
 /** Payload for MSG_DIRECT: client sends an E2E-encrypted direct message. */
-export interface MsgDirectPayload {
+export interface MsgDirectPayload extends BasePayload {
   ciphertext: string;     // base64url RSA-OAEP(SHA-256) ciphertext (max 446 bytes plaintext)
   sender_sig_pub: string; // base64url RSASSA-PSS public key of sender
   content_sig: string;    // base64url RSASSA-PSS(SHA-256) signature over the ts field
@@ -108,7 +125,7 @@ export interface MsgDirectPayload {
 // ── Server-to-User / Server-to-Server Delivery Payloads ─────
 
 /** Payload for USER_DELIVER: server delivers an encrypted message to a local client. */
-export interface UserDeliverPayload {
+export interface UserDeliverPayload extends BasePayload {
   ciphertext: string;
   sender: string;         // sender's username
   sender_sig_pub: string; // base64url RSASSA-PSS public key
@@ -116,7 +133,7 @@ export interface UserDeliverPayload {
 }
 
 /** Payload for SERVER_DELIVER: server forwards an encrypted message to another server. */
-export interface ServerDeliverPayload {
+export interface ServerDeliverPayload extends BasePayload {
   user_id: string;        // recipient user UUID
   ciphertext: string;
   sender: string;         // sender's username
@@ -127,7 +144,7 @@ export interface ServerDeliverPayload {
 // ── Control Payloads ─────────────────────────────────────────
 
 /** Payload for ERROR messages. */
-export interface ErrorPayload {
+export interface ErrorPayload extends BasePayload {
   code: string;    // e.g. "USER_NOT_FOUND"
   message: string; // human-readable description
 }
