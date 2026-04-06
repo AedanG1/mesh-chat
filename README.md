@@ -39,6 +39,17 @@ Make sure to have:
 - Node.js 22+ and npm 10+
 - Docker and Docker Compose (for the mesh simulation)
 
+## Cloning the repo
+
+```bash
+git clone https://github.com/AedanG1/mesh-chat.git
+
+# OR if using SSH
+git clone git@github.com:AedanG1/mesh-chat.git
+
+cd mesh-chat
+```
+
 ## Project Structure
 
 ```
