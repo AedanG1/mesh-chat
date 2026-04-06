@@ -82,26 +82,7 @@ make build
 Compiles TypeScript for `common`, `server`, and `client` in the correct order.
 `common` is built first because both `server` and `client` import from it.
 
-### 3. Start the server
-
-```sh
-make dev-server
-```
-
-Runs the server with `tsx` (on-the-fly TypeScript execution) on port `9000`.
-The `build` target runs automatically as a prerequisite.
-
-### 4. Start the client
-
-In a separate terminal:
-
-```sh
-make dev-client
-```
-
-Starts Vite's dev server on `http://localhost:5173`.
-
-### 5. Start both at once
+### 3. Start both at once
 
 ```sh
 make dev
@@ -110,7 +91,24 @@ make dev
 Runs the server and client as parallel background processes. Press `Ctrl+C` to
 stop both.
 
-### 6. Run tests
+#### Alternatively, start them separately
+
+```sh
+make dev-server
+```
+
+Runs the server with `tsx` (on-the-fly TypeScript execution) on port `9000`.
+The `build` target runs automatically as a prerequisite.
+
+And in a separate terminal:
+
+```sh
+make dev-client
+```
+
+Starts Vite's dev server on `http://localhost:5173`.
+
+### 4. Run tests
 
 ```sh
 make test
