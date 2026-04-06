@@ -102,7 +102,7 @@ make dev
 Runs the server and client as parallel background processes. Press `Ctrl+C` to
 stop both.
 
-#### Alternatively, start them separately
+### 3.a. Alternatively, start them separately
 
 ```sh
 make dev-server
