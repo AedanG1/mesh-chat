@@ -63,6 +63,12 @@ mesh-chat/
 The project uses npm workspaces. All three packages (`common`, `server`,
 `client`) are installed and linked from the root `package.json`.
 
+## Important note
+
+Make sure when Registering or Logging in to the app, select the corresponding server for the environment you're using.
+- Local development: Select "Development Server"
+- Docker: Select "Docker Server x"
+
 ## Quick Start
 
 ```sh
@@ -119,7 +125,11 @@ make dev-client
 
 Starts Vite's dev server on `http://localhost:5173`.
 
-### 4. Run tests
+### 4. Open the app in your browser
+
+Open `http://localhost:5173` in your browser. In the login/register form, select the Development server in the dropdown.
+
+### 5. Run tests
 
 ```sh
 make test
@@ -147,15 +157,7 @@ This builds all images and starts four containers:
 | server3   | 9000          | 3003      | Joins via server1 + server2 |
 | client    | 5173          | 5173      | nginx serving the Vite build|
 
-Open `http://localhost:5173` in your browser. In the login/register form, enter
-one of the server URLs to connect to:
-
-- `http://localhost:3001` (server1)
-- `http://localhost:3002` (server2)
-- `http://localhost:3003` (server3)
-
-Users on different servers can message each other. The servers route messages
-through the mesh automatically.
+Open `http://localhost:5173` in your browser. In the login/register form, select one of the Docker servers in the dropdown.
 
 ### View logs
 
