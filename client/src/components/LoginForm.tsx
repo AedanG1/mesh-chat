@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from "react";
 import { useAuth } from "../hooks/useAuth.js";
+import { ServerDropdown } from "./ServerDropdown.js";
 
 /**
  * Login form component.
@@ -43,17 +44,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         </div>
       )}
 
-      <label className="flex flex-col gap-1 text-sm text-gray-400">
-        Server URL
-        <input
-          type="text"
-          value={serverUrl}
-          onChange={(e) => setServerUrl(e.target.value)}
-          placeholder="http://localhost:3001"
-          required
-          className="px-3 py-2 bg-gray-950 border border-gray-700 rounded text-gray-200 text-sm focus:outline-none focus:border-blue-500"
-        />
-      </label>
+      <ServerDropdown serverUrl={serverUrl} setServerUrl={setServerUrl} />
 
       <label className="flex flex-col gap-1 text-sm text-gray-400">
         Username
