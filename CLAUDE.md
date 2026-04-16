@@ -20,7 +20,7 @@ As an AI coding agent, your role is to guide me through developing this project,
 - Docker (simulate n-to-n mesh of servers)
 
 # Project Overview
-This project is a basic chat app with a focus on cryptography and an n-to-n mesh server topology. Each server is connected using WebSockets and each Client is connected to it's Local Server using WebSockets. Messages aren't stored in a persistent database (message history can be short lived on the client). Users can only send messages to Users who are connected to the network. Messages between Users are End-to-End Encrypted. The state of the network is stored in in-memory tables on each server. Each server on the network is responsible for keeping the entire network state up-to-date by broadcasting each event to every server on the network using JSON protocol messages.
+This project is a basic chat app with a focus on cryptography and an n-to-n mesh server topology. Each server is connected using WebSockets and each Client is connected to it's Local Server using WebSockets. Messages aren't stored in a persistent database (message history can be short lived on the client). Users can only send messages to Users who are connected to the network. Messages between Users are End-to-End Encrypted. The state of the network is stored in in-memory tables on each server. Each server on the network is responsible for keeping the entire network state up-to-date by broadcasting each event to every server on the network using JSON messages.
 
 Because this is a learning project it there's no need to worry about deployment. Docker needs to be used in order to be able to simulate the n-to-n mesh of servers. 
 
