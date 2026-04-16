@@ -258,10 +258,10 @@ recipient.
     "sig":"<server_2 signature over payload>"
   }
   ```
-  - Once the recipient's local server receives this SERVER_DELIVER message, the recipient's local server has to verify the transport signature, "sig", using the sender server's public key. Once the recipient server decrypts the transport signature, it hashes the payload and compares it to the decrypted transport signature hash. Only once that's been verified does the recipient server create a USER_DELIVER message out of the payload in SERVER_DELIVER message to send to the recipient's client.
+  - Once the recipient's local server receives this SERVER_DELIVER message, the recipient's local server has to verify the transport signature, "sig", using the sender server's public key. Once the recipient server verifies the transport signature, it creates a USER_DELIVER message out of the payload in SERVER_DELIVER message to send to the recipient's client.
 
 Recipient Client behavior:
-Once the recipient client gets the USER_DELIVER message, it has to verify the content_sig by using the sender_user's public key to decrypt the content_sig. Once the content_sig hash is decrypted, the recipient client can hash the ciphertext field and compare to verify the contents weren't changed. It can then decrypt the ciphertext with the recipient user's private key.
+Once the recipient client gets the USER_DELIVER message, it has to verify the content_sig by using the sender_user's public key verify the contents weren't changed. Once verified, It can then decrypt the ciphertext with the recipient user's private key.
 
 Error Handling:
 If no recipient user is found, emit ERROR(USER_NOT_FOUND) upstream.
